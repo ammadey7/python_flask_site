@@ -1,0 +1,52 @@
+version: '3.8'
+
+networks:
+  traefik-public:
+    external: true
+
+services:
+  traefik:
+    image: traefik:v2.10
+    container_name: traefik
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./letsencrypt:/letsencrypt
+    environment:
+      - CF_DNS_API_TOKEN=${CF_DNS_API_TOKEN}
+      - CF_API_EMAIL=${CF_API_EMAIL}
+    command:
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.docker.network=traefik-public"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--certificatesresolvers.cloudflare.acme.dnschallenge=true"
+      - "--certificatesresolvers.cloudflare.acme.dnschallenge.provider=cloudflare"
+      - "--certificatesresolvers.cloudflare.acme.email=${CF_API_EMAIL}"
+      - "--certificatesresolvers.cloudflare.acme.storage=/letsencrypt/acme.json"
+      - "--log.level=INFO"
+      - "--api.dashboard=true"
+      - "--api.insecure=false"
+    networks:
+      - traefik-public
+
+  hr:
+    build:
+      context: /home/ahmed-hr-ptc/Desktop/python_flask_site
+      dockerfile: Dockerfile
+    image: hr-app:latest
+    container_name: hr
+    restart: unless-stopped
+    networks:
+      - traefik-public
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.hr.rule=Host(`hr.ptc.edu.mv`)"
+      - "traefik.http.routers.hr.entrypoints=websecure"
+      - "traefik.http.routers.hr.tls=true"
+      - "traefik.http.routers.hr.tls.certresolver=cloudflare"
+      - "traefik.http.services.hr.loadbalancer.server.port=5000"
